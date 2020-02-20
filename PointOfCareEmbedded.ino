@@ -2,12 +2,12 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 
-
+// Variable Declarations
 const int heatSensorPin = A0;  // Analog input pin that senses Vout
 const int heaterControlPin = 16;  
 const int ledOnePin = 0;  
 const int ledTwoPin = 2;  
-int sensorValue = 0;       // sensorPin default value
+//===================================================================================================================
 float Vin = 3.3;           // Input voltage
 float Vout = 0;            // Vout default value
 float Rref = 9900;         // Reference resistor's value in ohms (you can give this value in kiloohms or megaohms - the resistance of the tested resistor will be given in the same units)
@@ -16,25 +16,29 @@ float Ro = 11080;
 float To = 294.15;
 float B = 3950;
 float T = 0;
+//===================================================================================================================
 
 int reactionStartTimeMilli = 0;
-
 int ndvTestTime = 1800000;
-
 int debuggingTestTime = 30000;
+int sensorValue = 0;       // sensorPin default value
+//===================================================================================================================
 
+//Soft Access Point Variables
 IPAddress ip(69, 69, 69, 69); 
 IPAddress gateway(192, 168, 0, 1);
 IPAddress subnet(255, 255, 255, 0); 
+ESP8266WebServer server(80);
+//===================================================================================================================
 
+//Logic Booleans
 bool heatOn = false;
 bool informedPhone = false;
 bool doTest = true;
 
 const char* ssid = "NodeET";
 const char* password = "123456789";
-
-ESP8266WebServer server(80);
+//===================================================================================================================
 
 void exciteLEDBois(){
   digitalWrite(ledOnePin, HIGH);
@@ -102,7 +106,8 @@ void handleRoot() {
 }
 void handleNDV(){
   Serial.println("inndvroot");
-  startNDV();
+  server.send(200, "text/plain", "this works as well");
+  //startNDV();
 }
 
 void setup ()
@@ -115,7 +120,7 @@ void setup ()
   pinMode(ledOnePin, OUTPUT);
   //D3 LED Pin
   pinMode(ledTwoPin, OUTPUT);
-  turnOffLEDBois();
+  //turnOffLEDBois();
 
   
   //Wifi Soft AP Setup will start the server and respond to GET requests, must be disconnected from data on phone end. 
