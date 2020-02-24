@@ -1,6 +1,8 @@
 #include <math.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <Thread.h>
+
 
 // Variable Declarations
 const int heatSensorPin = A0;  // Analog input pin that senses Vout
@@ -20,7 +22,7 @@ float T = 0;
 
 int reactionStartTimeMilli = 0;
 int ndvTestTime = 1800000;
-int debuggingTestTime = 30000;
+int debuggingTestTime = 10000;
 int sensorValue = 0;       // sensorPin default value
 //===================================================================================================================
 
@@ -35,10 +37,15 @@ ESP8266WebServer server(80);
 bool heatOn = false;
 bool informedPhone = false;
 bool doTest = true;
+bool upToTemp = false;
 
 const char* ssid = "NodeET";
 const char* password = "123456789";
 //===================================================================================================================
+
+
+Thread clientHandlingThread = Thread();
+
 
 void exciteLEDBois(){
   digitalWrite(ledOnePin, HIGH);
@@ -50,9 +57,37 @@ void turnOffLEDBois(){
   digitalWrite(ledTwoPin, LOW);
 }
 
-void informPhone(){
-  server.send(200, "text/plain", "Chip up to temperature");
+void tempCheckFunc(){
+  if(upToTemp){
+    server.send(200, "text/plain", "Chip up to temperature");
+  }
+  else{
+    server.send(204, "text/plain", "WAIT");
+  }
 }
+
+void fakeNDVFunction(){
+  Serial.println("inndvsecond");
+  reactionStartTimeMilli = millis();
+
+  while(doTest){
+    clientHandlingThread.run();
+    delay(250);
+    doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime; //10s
+  }
+  doTest = true;
+  upToTemp = true;
+  Serial.println("Setting Flag!");
+  reactionStartTimeMilli = millis();
+
+  while(doTest){
+    clientHandlingThread.run();
+    delay(250);
+    doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime; //10s
+  }
+  
+}
+
 
 float senseT(){
   sensorValue = analogRead(heatSensorPin);  // Read Vout on analog input pin A0 (Arduino can sense from 0-1023, 1023 is 5V)
@@ -69,31 +104,30 @@ float senseT(){
 
   
 void startNDV(){
-  Serial.println("inndvsecond");
-  while(doTest){
-  T = senseT();
-  heatOn = T <=65;
-  if(heatOn){
-  analogWrite(16,1023);  
-  }
-  else{
-  analogWrite(16,0);  
-    if(!informedPhone){      
-    reactionStartTimeMilli = millis();
-    //informPhone();
-    exciteLEDBois();
-    informedPhone = true;
-    Serial.println("Sent 200");
-    }
   
-  //doTest = (millis() - reactionStartTimeMilli) < ndvTestTime;
-  doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime;
-  Serial.println(millis() - reactionStartTimeMilli);
-  }
-  Serial.print("T: ");                         
-  Serial.println(T);
-  //Sample Rate SORTA
-  delay(250);
+  while(doTest){
+    clientHandlingThread.run();
+    T = senseT();
+    heatOn = T <=65;
+    if(heatOn){
+    analogWrite(16,1023);  
+    }
+    else{
+    analogWrite(16,0);  
+      if(!informedPhone){      
+      reactionStartTimeMilli = millis();
+      upToTemp = true;
+      exciteLEDBois();
+      }
+  
+    //doTest = (millis() - reactionStartTimeMilli) < ndvTestTime;
+    doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime;
+    //Serial.println(millis() - reactionStartTimeMilli);
+    }
+    //Serial.print("T: ");                         
+    //Serial.println(T);
+    //Sample Rate SORTA
+    delay(250);
   }
   analogWrite(16,0);  
   turnOffLEDBois();
@@ -104,14 +138,19 @@ void startNDV(){
 void handleRoot() {
   Serial.println("inrootfunc");
 }
+
 void handleNDV(){
   Serial.println("inndvroot");
   server.send(200, "text/plain", "this works as well");
   //startNDV();
+  fakeNDVFunction();
 }
 
 void setup ()
 {
+  clientHandlingThread.enabled = true; // Default enabled value is true
+  clientHandlingThread.onRun(clientHandlerCallbackFunc);
+  
   Serial.begin(9600);      // Initialize serial communications at 9600 bps
 
   //D0 Heater Control Pin
@@ -137,13 +176,19 @@ void setup ()
   server.on ( "/inline", []() {
     server.send ( 200, "text/plain", "this works as well" );
     } );
+  server.on ( "/tempCheck", tempCheckFunc );
   
   // Start server
   server.begin();
   Serial.println("HTTP server started");
 }
 
+void clientHandlerCallbackFunc()
+{
+  server.handleClient(); //Handling of incoming requests	
+}
+
 void loop ()
 {
-  server.handleClient(); //Handling of incoming requests
+ clientHandlingThread.run();
 }
