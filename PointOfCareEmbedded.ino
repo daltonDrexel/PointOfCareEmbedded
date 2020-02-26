@@ -1,7 +1,6 @@
 #include <math.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <Thread.h>
 
 
 // Variable Declarations
@@ -22,7 +21,7 @@ float T = 0;
 
 int reactionStartTimeMilli = 0;
 int ndvTestTime = 1800000;
-int debuggingTestTime = 10000;
+int debuggingTestTime = 60000;
 int sensorValue = 0;       // sensorPin default value
 //===================================================================================================================
 
@@ -42,9 +41,6 @@ bool upToTemp = false;
 const char* ssid = "NodeET";
 const char* password = "123456789";
 //===================================================================================================================
-
-
-Thread clientHandlingThread = Thread();
 
 
 void exciteLEDBois(){
@@ -71,7 +67,7 @@ void fakeNDVFunction(){
   reactionStartTimeMilli = millis();
 
   while(doTest){
-    clientHandlingThread.run();
+    server.handleClient();  
     delay(250);
     doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime; //10s
   }
@@ -81,7 +77,7 @@ void fakeNDVFunction(){
   reactionStartTimeMilli = millis();
 
   while(doTest){
-    clientHandlingThread.run();
+    server.handleClient(); 
     delay(250);
     doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime; //10s
   }
@@ -106,7 +102,13 @@ float senseT(){
 void startNDV(){
   
   while(doTest){
-    clientHandlingThread.run();
+    //This is to allow the phone to check the temp
+    server.handleClient(); 
+    
+    //Sample Rate SORTA
+    delay(250);
+
+    
     T = senseT();
     heatOn = T <=65;
     if(heatOn){
@@ -118,39 +120,42 @@ void startNDV(){
       reactionStartTimeMilli = millis();
       upToTemp = true;
       exciteLEDBois();
+      informedPhone = true;
       }
   
     //doTest = (millis() - reactionStartTimeMilli) < ndvTestTime;
     doTest = (millis() - reactionStartTimeMilli) < debuggingTestTime;
     //Serial.println(millis() - reactionStartTimeMilli);
     }
-    //Serial.print("T: ");                         
-    //Serial.println(T);
-    //Sample Rate SORTA
-    delay(250);
+    Serial.print("T: ");                         
+    Serial.println(T);
   }
   analogWrite(16,0);  
   turnOffLEDBois();
   informedPhone = false;
+  upToTemp = false;
   doTest = true;
+  
 }
  
-void handleRoot() {
-  Serial.println("inrootfunc");
+void stopNDV() {
+  server.send(200, "text/plain", "this works as well");
+  analogWrite(16,0);  
+  turnOffLEDBois();
+  informedPhone = false;
+  upToTemp = false;
+  doTest = true;
 }
 
 void handleNDV(){
   Serial.println("inndvroot");
   server.send(200, "text/plain", "this works as well");
-  //startNDV();
-  fakeNDVFunction();
+  startNDV();
+  //fakeNDVFunction();
 }
 
 void setup ()
 {
-  clientHandlingThread.enabled = true; // Default enabled value is true
-  clientHandlingThread.onRun(clientHandlerCallbackFunc);
-  
   Serial.begin(9600);      // Initialize serial communications at 9600 bps
 
   //D0 Heater Control Pin
@@ -171,7 +176,7 @@ void setup ()
   Serial.println(myIP);
 
   //SoftAP server routes
-  server.on ( "/", handleRoot );
+  server.on ( "/stopndv", stopNDV );
   server.on ( "/ndv", handleNDV );
   server.on ( "/inline", []() {
     server.send ( 200, "text/plain", "this works as well" );
@@ -183,12 +188,7 @@ void setup ()
   Serial.println("HTTP server started");
 }
 
-void clientHandlerCallbackFunc()
-{
-  server.handleClient(); //Handling of incoming requests	
-}
-
 void loop ()
 {
- clientHandlingThread.run();
+ server.handleClient(); //Handling of incoming requests 
 }
